@@ -3,7 +3,6 @@ import logging
 import PyPDF2
 from typing import Dict, Any, List
 import re
-from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -64,13 +63,14 @@ def process_bookmarks(reader: PyPDF2.PdfReader) -> List[Dict[str, Any]]:
     return result
 
 
-def extract_structure_from_pdf(pdf_path: Path) -> Dict[str, Any] | None:
+def extract_structure_from_pdf(pdf_path: Path) -> Dict[str, Any]:
     """
     Extract structure information from PDF file, including table of contents and text content
     Returns a dictionary containing document structure and text content
     """
     logger.debug(f"Extracting PDF structure information: {pdf_path}")
     result = {
+        "title": pdf_path.stem,
         "bookmarks": [],
         "pages": [],
     }
@@ -87,13 +87,13 @@ def extract_structure_from_pdf(pdf_path: Path) -> Dict[str, Any] | None:
                 logger.debug(f"Extracted bookmark structure: {result['bookmarks']}")
             else:
                 logger.debug("No built-in bookmarks found in PDF")
-                return {"bookmarks": [], "pages": []}
             result["pages"] = extract_text_from_pdf(pdf_path)
 
         return result
     except Exception as e:
         logger.error(f"Error extracting PDF structure: {str(e)}", exc_info=True)
         return {
+            "title": pdf_path.stem,
             "bookmarks": [],
             "pages": extract_text_from_pdf(pdf_path),
         }
@@ -146,19 +146,21 @@ def preprocess_text(structure: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-# def emebedding(text: str) -> str:
-#     logger.debug(f"Generating embedding for text: {text}")
-#     return SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2").encode(text)
-
-
-def main():
+def main() -> List[Dict[str, Any]]:
     pdfs = Path("./papers").glob("*.pdf")
+    result = []
     for pdf in pdfs:
         structure = extract_structure_from_pdf(pdf)
         if structure["pages"]:
             preprocessed_text = preprocess_text(structure)
-            with open(pdf.with_name(f"{pdf.stem}.txt"), "w", encoding="utf-8") as f:
-                f.write(preprocessed_text["full_text"])
+            result.append(
+                {
+                    "title": structure["title"],
+                    "bookmarks": structure["bookmarks"],
+                    "text": preprocessed_text,
+                }
+            )
+    return result
 
 
 if __name__ == "__main__":

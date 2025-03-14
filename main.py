@@ -13,7 +13,7 @@ load_dotenv()
 # =======================
 # Configuration Constants
 # =======================
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
 JINA_API_KEY = os.getenv("JINA_API_KEY")
 
@@ -37,7 +37,7 @@ async def call_openrouter_async(session, messages, model=DEFAULT_MODEL):
     Returns the content of the assistant’s reply.
     """
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {LLM_BASE_URL}",
         "Content-Type": "application/json",
     }
     payload = {"model": model, "messages": messages}

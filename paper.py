@@ -85,4 +85,4 @@ async def main(keyword: str, save_dir_str: str, max_paper: int):
 
 
 if __name__ == "__main__":
-    asyncio.run(main("ai agent", "./papers", 20))
+    asyncio.run(main("attention is all you need", "./papers", 20))
