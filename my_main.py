@@ -32,12 +32,24 @@ JINA_BASE_URL = os.getenv("JINA_BASE_URL")
 
 # Default LLM model (can be changed if desired)
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL")
+# Default top k similar papers
+TOP_K = os.getenv("TOP_K", 3)
 
 
 async def call_llm(session, messages, model=DEFAULT_MODEL):
     """
     Asynchronously call the LLM chat completion API with the provided messages.
-    Returns the content of the assistant’s reply.
+
+    Args:
+        session: The aiohttp ClientSession for making HTTP requests.
+        messages: A list of message dictionaries with 'role' and 'content' keys.
+        model: The language model identifier to use. Defaults to DEFAULT_MODEL.
+
+    Returns:
+        str: The content of the assistant's reply, or None if the request failed.
+
+    Raises:
+        Exception: If an error occurs during the API call.
     """
     headers = {
         "Authorization": f"Bearer {LLM_API_KEY}",
@@ -67,7 +79,21 @@ async def call_llm(session, messages, model=DEFAULT_MODEL):
 # =========================================================
 
 
-async def search_paper(topic: str, max_results: int = 10) -> List[Dict[str, Any]]:
+async def search_paper(topic: str, max_results: int) -> List[Dict[str, Any]]:
+    """
+    Search for academic papers on a given topic using the arXiv API.
+
+    Args:
+        topic: The search query string.
+        max_results: Maximum number of papers to retrieve. Defaults to 10.
+
+    Returns:
+        List[Dict[str, Any]]: A list of paper dictionaries containing title and PDF URL.
+
+    Raises:
+        Exception: If an error occurs during the API call.
+    """
+
     try:
         search = arxiv.Search(query=topic, max_results=max_results)
         papers = []
@@ -91,6 +117,20 @@ async def download_paper(
     paper: Dict[str, Any],
     save_dir: Path = PAPER_STORAGE_DIR,
 ) -> Optional[Path]:
+    """
+    Download a PDF paper from a given URL.
+
+    Args:
+        session: The aiohttp ClientSession for making HTTP requests.
+        paper: A dictionary containing paper information with 'title' and 'pdf_url' keys.
+        save_dir: Directory to save the downloaded PDF. Defaults to PAPER_STORAGE_DIR.
+
+    Returns:
+        Optional[Path]: Path to the downloaded PDF file, or None if the download failed.
+
+    Raises:
+        Exception: If an error occurs during the download.
+    """
     title = paper["title"]
     logger.debug(f"Attempting to download paper: '{title}'")
     pdf_url = paper["pdf_url"]
@@ -118,6 +158,16 @@ async def download_paper(
 
 
 async def paper_main(topic: str, max_paper: int) -> List[Dict[str, Any]]:
+    """
+    Main function to search for and download papers.
+
+    Args:
+        topic: The search query string.
+        max_paper: Maximum number of papers to retrieve. Defaults to 10.
+
+    Returns:
+        List[Dict[str, Any]]: A list of paper dictionaries containing title and PDF URL.
+    """
     logger.info(f"Starting paper search and download process for '{topic}'")
     save_dir = Path(PAPER_STORAGE_DIR)
     if not save_dir.exists():
@@ -148,7 +198,18 @@ import PyPDF2
 
 
 def extract_text_from_pdf(pdf_path: Path) -> List[str]:
-    """Extract text content from PDF file"""
+    """
+    Extract text content from PDF file.
+
+    Args:
+        pdf_path: Path to the PDF file.
+
+    Returns:
+        List[str]: A list of extracted text pages.
+
+    Raises:
+        Exception: If an error occurs during the extraction.
+    """
     logger.debug(f"Extracting text from PDF: {pdf_path}")
     try:
         text = []
@@ -167,7 +228,13 @@ def extract_text_from_pdf(pdf_path: Path) -> List[str]:
 
 def process_bookmarks(reader: PyPDF2.PdfReader) -> List[Dict[str, Any]]:
     """
-    Process PDF top-level bookmarks and convert to an easy-to-handle format
+    Process PDF top-level bookmarks and convert to an easy-to-handle format.
+
+    Args:
+        reader: PyPDF2.PdfReader object containing the PDF document.
+
+    Returns:
+        List[Dict[str, Any]]: A list of bookmark dictionaries with 'title' and 'page_num' keys.
     """
     result = []
     bookmarks = reader.outline
@@ -178,7 +245,7 @@ def process_bookmarks(reader: PyPDF2.PdfReader) -> List[Dict[str, Any]]:
         ):
             page_id_to_index[page.indirect_reference.idnum] = i + 1
 
-    # FIXME 如果没有abstract怎么办?
+    # FIXME What if there's no abstract?
     result.append({"title": "abstract", "page_num": 1})
     for item in bookmarks:
         # Only process dictionary-type bookmark entries
@@ -204,7 +271,14 @@ def process_bookmarks(reader: PyPDF2.PdfReader) -> List[Dict[str, Any]]:
 
 def preprocess_text(paper: Dict[str, Any]):
     """
-    Split text content into different sections according to bookmarks
+    Split text content into different sections according to bookmarks.
+
+    Args:
+        paper: Dictionary containing paper data with 'bookmarks' and 'pages' keys.
+            This dictionary will be modified to add 'section_title_to_text' and 'full_text'.
+
+    Returns:
+        None: The function modifies the paper dictionary in-place.
     """
     paper["section_title_to_text"] = {}
     bookmarks = paper["bookmarks"]
@@ -245,16 +319,26 @@ def preprocess_text(paper: Dict[str, Any]):
 
 
 def merge_section_text(paper: Dict[str, Any]) -> Dict[str, Any]:
-    section_title_to_text = paper["section_title_to_text"]
     """
-    classify section into these categories:
+    Classify and merge paper sections into standard categories.
+
+    Organizes section text into five standard categories:
     - Abstract
     - Introduction
     - Body
     - Discussion
     - Conclusion
+
+    Args:
+        paper: Dictionary containing paper data with 'section_title_to_text' key.
+            This dictionary will be modified to replace 'section_title_to_text' with
+            standardized categories.
+
+    Returns:
+        Dict[str, Any]: The input paper dictionary with modified 'section_title_to_text'.
     """
-    # 创建标准类别
+    section_title_to_text = paper["section_title_to_text"]
+    # Create standard categories
     standard_categories = {
         "abstract": "",
         "introduction": "",
@@ -263,7 +347,7 @@ def merge_section_text(paper: Dict[str, Any]) -> Dict[str, Any]:
         "conclusion": "",
     }
 
-    # 关键词映射到标准类别
+    # Map keywords to standard categories
     category_keywords = {
         "abstract": ["abstract", "summary", "overview"],
         "introduction": [
@@ -299,19 +383,19 @@ def merge_section_text(paper: Dict[str, Any]) -> Dict[str, Any]:
         "conclusion": ["conclusion", "future work", "limitation", "final"],
     }
 
-    # 检测章节序号的正则模式
+    # Regular pattern to detect section numbers
     section_number_pattern = re.compile(r"^\d+\.?\s*|^[ivxlcdm]+\.?\s*", re.IGNORECASE)
 
-    # 分配每个章节到标准类别
+    # Assign each section to a standard category
     logger.debug(f"Merging sections for paper: {paper.get('title', 'Unknown')}")
     for section_title, text in section_title_to_text.items():
-        # 预处理章节标题：移除数字前缀，转为小写
+        # Preprocess section title: remove number prefix, convert to lowercase
         cleaned_title = section_number_pattern.sub("", section_title.lower())
 
-        # 匹配到的类别
+        # Matched category
         matched_category = None
 
-        # 根据关键词匹配类别
+        # Match category based on keywords
         for category, keywords in category_keywords.items():
             for keyword in keywords:
                 if keyword in cleaned_title:
@@ -323,34 +407,34 @@ def merge_section_text(paper: Dict[str, Any]) -> Dict[str, Any]:
             if matched_category:
                 break
 
-        # 使用启发式规则处理未匹配的情况
+        # Use heuristic rules for unmatched cases
         if not matched_category:
-            # 第一部分通常是摘要或引言
+            # First section is usually abstract or introduction
             if section_title == list(section_title_to_text.keys())[0]:
-                if len(text.split()) < 300:  # 短文本可能是摘要
+                if len(text.split()) < 300:  # Short text is likely an abstract
                     matched_category = "abstract"
                 else:
                     matched_category = "introduction"
                 logger.debug(
                     f"First section '{section_title}' assigned to '{matched_category}' by position"
                 )
-            # 最后部分通常是结论
+            # Last section is usually conclusion
             elif section_title == list(section_title_to_text.keys())[-1]:
                 matched_category = "conclusion"
                 logger.debug(
                     f"Last section '{section_title}' assigned to 'conclusion' by position"
                 )
-            # 其他情况默认为主体部分
+            # Default to body for other cases
             else:
                 matched_category = "body"
                 logger.debug(f"Section '{section_title}' defaulted to 'body' category")
 
-        # 将文本添加到对应类别
+        # Add text to corresponding category
         if standard_categories[matched_category]:
             standard_categories[matched_category] += f"\n\n"
         standard_categories[matched_category] += text
 
-    # 保存合并后的类别文本
+    # Save merged category text
     paper["section_title_to_text"] = standard_categories
     logger.debug(
         f"Successfully merged sections into standard categories for {paper.get('title', 'Unknown')}"
@@ -359,7 +443,18 @@ def merge_section_text(paper: Dict[str, Any]) -> Dict[str, Any]:
 
 def extract_structure_from_pdf(pdf_path: Path, paper: Dict[str, Any]):
     """
-    Extract structure information from PDF file, including table of contents and text content
+    Extract structure information from PDF file, including table of contents and text content.
+
+    Args:
+        pdf_path: Path to the PDF file.
+        paper: Dictionary containing paper metadata that will be updated with 'bookmarks' and 'pages'.
+            This dictionary will be modified in-place to add extracted information.
+
+    Returns:
+        None: The function modifies the paper dictionary in-place.
+
+    Raises:
+        Exception: If an error occurs during the extraction.
     """
     logger.debug(f"Extracting PDF structure information: {pdf_path}")
     try:
@@ -383,6 +478,21 @@ def extract_structure_from_pdf(pdf_path: Path, paper: Dict[str, Any]):
 
 
 def pdf_process_main(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Process a list of paper dictionaries by extracting information from their PDFs.
+
+    This function orchestrates the PDF processing pipeline:
+    1. Extracts structure and content from each paper's PDF
+    2. Preprocesses the text to separate sections
+    3. Merges sections into standard categories
+
+    Args:
+        papers: List of paper dictionaries containing at least 'title' keys
+               pointing to PDF files in the PAPER_STORAGE_DIR.
+
+    Returns:
+        List[Dict[str, Any]]: Filtered list of papers that were successfully processed.
+    """
     pdfs = Path(PAPER_STORAGE_DIR).glob("*.pdf")
     for pdf in pdfs:
         for paper in papers:
@@ -391,7 +501,7 @@ def pdf_process_main(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 if paper["pages"]:
                     preprocess_text(paper)
     processed_papers = []
-    # TODO 可以把以后用不到的属性del掉，减少传输数据的开销
+    # TODO We can delete unused attributes to reduce data transfer overhead
     for paper in papers:
         if "pages" in paper:
             processed_papers.append(paper)
@@ -494,6 +604,19 @@ def embedding_section(section_text: str) -> np.ndarray:
 
 
 def embedding(papers: List[Dict[str, Any]]):
+    """
+    Generate embeddings for each section of each paper's summary.
+
+    This function iterates through all papers and creates vector representations
+    of each section's summary text using the embedding_section function.
+
+    Args:
+        papers: List of paper dictionaries containing 'section_title_to_summary' keys.
+            Each paper dictionary will be modified to add 'section_title_to_embedding'.
+
+    Returns:
+        None: The function modifies the papers list in-place.
+    """
     for paper in papers:
         paper["section_title_to_embedding"] = {
             key: embedding_section(value)
@@ -502,10 +625,33 @@ def embedding(papers: List[Dict[str, Any]]):
 
 
 def similarity_by_sentence(sentenceA: np.ndarray, sectionB: np.ndarray) -> float:
+    """
+    Calculate the similarity between a single sentence embedding and a section of embeddings.
+
+    Args:
+        sentenceA: Embedding vector for a single sentence.
+        sectionB: Array of embedding vectors for multiple sentences in a section.
+
+    Returns:
+        float: Maximum similarity score (dot product) between the sentence and any sentence in the section.
+    """
     return np.max([np.dot(sentenceA, b) for b in sectionB])
 
 
 def similarity_by_section(sectionA: np.ndarray, sectionB: np.ndarray) -> float:
+    """
+    Calculate the bidirectional similarity between two sections of embeddings.
+
+    Computes the mean of similarities in both directions (A to B and B to A)
+    to provide a symmetric similarity measure between sections.
+
+    Args:
+        sectionA: Array of embedding vectors for sentences in the first section.
+        sectionB: Array of embedding vectors for sentences in the second section.
+
+    Returns:
+        float: Average bidirectional similarity score between the two sections.
+    """
     return np.mean(
         [similarity_by_sentence(a, sectionB) for a in sectionA]
         + [similarity_by_sentence(b, sectionA) for b in sectionB]
@@ -515,6 +661,19 @@ def similarity_by_section(sectionA: np.ndarray, sectionB: np.ndarray) -> float:
 def generate_similarity_matrix(
     papers: List[Dict[str, Any]], section_title: str
 ) -> np.ndarray:
+    """
+    Generate a similarity matrix between papers based on a specific section.
+
+    Creates an upper triangular matrix where each cell [i,j] represents the
+    similarity between paper i and paper j for the specified section.
+
+    Args:
+        papers: List of paper dictionaries containing 'section_title_to_embedding' keys.
+        section_title: The section name to use for similarity comparison (e.g., 'abstract').
+
+    Returns:
+        np.ndarray: Upper triangular similarity matrix of shape (len(papers), len(papers)).
+    """
     num_papers = len(papers)
     matrix = np.zeros((num_papers, num_papers))
     for i in range(num_papers):
@@ -529,26 +688,37 @@ def generate_similarity_matrix(
 def get_top_pairs(
     papers: List[Dict[str, Any]], num_pairs: int, section_title: str
 ) -> List[Tuple[int, int]]:
+    """
+    Find the top most similar pairs of papers based on a specific section.
+
+    Args:
+        papers: List of paper dictionaries containing 'section_title_to_embedding' keys.
+        num_pairs: Number of most similar paper pairs to return.
+        section_title: The section name to use for similarity comparison (e.g., 'abstract').
+
+    Returns:
+        List[Tuple[int, int]]: List of paper index pairs, sorted by similarity in descending order.
+    """
     matrix = generate_similarity_matrix(papers, section_title)
 
-    # 复制上三角矩阵到下三角，得到完整的对称矩阵
+    # Copy the upper triangular matrix to the lower triangular part to get a complete symmetric matrix
     full_matrix = matrix + matrix.T - np.diag(np.diag(matrix))
 
-    # 设置对角线为-1以排除自身与自身的比较
+    # Set diagonal to -1 to exclude self-comparisons
     np.fill_diagonal(full_matrix, -1)
 
-    # 找到最大的num_pairs个元素的索引
-    # 将矩阵展平，找到最大值的索引
+    # Find indices of the top num_pairs elements
+    # Flatten the matrix and find indices of maximum values
     flat_indices = np.argsort(full_matrix.flat)[-num_pairs:]
 
-    # 将展平的索引转换回二维索引
+    # Convert flattened indices back to 2D indices
     pairs = []
     for idx in flat_indices:
-        # 计算对应的行列号
+        # Calculate corresponding row and column numbers
         i, j = np.unravel_index(idx, full_matrix.shape)
         pairs.append((i, j))
 
-    # 按相似度降序排列
+    # Sort by similarity score in descending order
     pairs.sort(key=lambda p: full_matrix[p[0], p[1]], reverse=True)
 
     return pairs
@@ -559,17 +729,19 @@ def get_top_pairs(
 # ===================
 
 
-def help_show_summary(papers: List[Dict[str, Any]]) -> str:
+def help_show_summary(papers: List[Dict[str, Any]], section_title: str) -> str:
     res = ""
     for paper in papers:
-        res += f"paper title:{paper['title']}\nsummary:{paper['summary_text']}\n"
+        res += f"paper title:{paper['title']}\nsummary:{paper['section_title_to_summary'][section_title]}\n"
     return res
 
 
-def help_show_pair(papers: List[Dict[str, Any]], pairs: List[Tuple[int, int]]) -> str:
+def help_show_pair(
+    papers: List[Dict[str, Any]], pairs: List[Tuple[int, int]], section_title: str
+) -> str:
     res = ""
     for i, (a, b) in enumerate(pairs):
-        res += f"Pair {i+1}:\n{papers[a]["title"]}:\n{papers[a]["text"]}\n{papers[b]["title"]}:\n{papers[b]["text"]}\n"
+        res += f"Pair {i+1}:\n{papers[a]["title"]}:\n{papers[a]["section_title_to_text"][section_title]}\n{papers[b]["title"]}:\n{papers[b]["section_title_to_text"][section_title]}\n"
     return res
 
 
@@ -583,10 +755,10 @@ async def report_abstract(
     """
     prompt = f"""Key findings from seminal papers:
 
-{help_show_summary(papers)}
+{help_show_summary(papers, "abstract")}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-{help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs, "abstract")}
 Writing Requirements
 Develop a 500-word abstract following these structural components:
 
@@ -640,10 +812,10 @@ async def report_introduction(
 
     prompt = f"""Curated knowledge base includes:
 
-{help_show_summary(papers)}
+{help_show_summary(papers,"introduction")}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-{help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs,"introduction")}
 
 Structural Framework
 Develop 800-1000 words organized as:
@@ -698,10 +870,10 @@ async def report_body(
     prompt = f"""Knowledge Integration
 Synthesize data from:
 
-{help_show_summary(papers)}
+{help_show_summary(papers,"body")}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-{help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs,"body")}
 
 Structural Architecture
 Develop 2000-2500 words through 5 interlocked modules:
@@ -750,10 +922,10 @@ async def report_disscussion(
     prompt = f"""You have already produced a comprehensive body section for a literature review on {topic}. Your next task is to generate the discussion section. This section should integrate and critically assess the key findings presented in the main body, exploring their broader implications, limitations, and potential future directions.
 Curated knowledge base includes:
 
-{help_show_summary(papers)}
+{help_show_summary(papers, "discussion")}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-{help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs, "discussion")}
     
 Requirements:
 
@@ -799,10 +971,10 @@ async def report_conclusion(
     prompt = f"""You have already developed the main body and discussion sections of a literature review on {topic}. Your next task is to produce a robust conclusion section that effectively integrates and summarizes the review.
 Curated knowledge base includes:
 
-{help_show_summary(papers)}
+{help_show_summary(papers, "conclusion")}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-{help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs, "conclusion")}
 Requirements:
 
 1. Summary of Key Points:
@@ -846,10 +1018,10 @@ async def report_title(
     prompt = f"""
 Curated knowledge base includes:
 
-{help_show_summary(papers)}
+{help_show_summary(papers, "title")}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-{help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs, "title")}
 
 1. Concise and Impactful:
    - Create a title that is succinct yet powerful, capturing the essence of the review.
@@ -881,18 +1053,45 @@ Based on these guidelines, please generate a single title (one sentence) that be
 
 
 async def async_main():
+    """
+    Main asynchronous entry point for the paper processing pipeline.
+
+    This function orchestrates the entire workflow:
+    1. Takes user input for the survey topic
+    2. Retrieves papers from arXiv
+    3. Processes PDF files
+    4. Generates summaries
+    5. Computes embeddings and similarities
+    6. Generates the final report
+    """
+    topic = input("Enter the survey topic: ")
+    try:
+        max_papers = int(input("Enter the maximum number of papers: "))
+    except ValueError:
+        max_papers = 10
     async with aiohttp.ClientSession() as session:
-        papers = await paper_main("machine learning", 20)
+        papers = await paper_main(topic, max_papers)
         papers = pdf_process_main(papers)
         await summary(session, papers)
         embedding(papers)
-        abstract_pairs = get_top_pairs(papers, 3, "abstract")
-        introduction_pairs = get_top_pairs(papers, 3, "introduction")
-        body_pairs = get_top_pairs(papers, 3, "body")
-        discussion_pairs = get_top_pairs(papers, 3, "discussion")
-        conclusion_pairs = get_top_pairs(papers, 3, "conclusion")
-        title_pairs = get_top_pairs(papers, 3, "title")
-        res = []
+        abstract_pairs = get_top_pairs(papers, TOP_K, "abstract")
+        introduction_pairs = get_top_pairs(papers, TOP_K, "introduction")
+        body_pairs = get_top_pairs(papers, TOP_K, "body")
+        discussion_pairs = get_top_pairs(papers, TOP_K, "discussion")
+        conclusion_pairs = get_top_pairs(papers, TOP_K, "conclusion")
+        title_pairs = get_top_pairs(papers, TOP_K, "title")
+        res = [
+            report_title(session, topic, papers, title_pairs),
+            report_abstract(session, topic, papers, abstract_pairs),
+            report_introduction(session, topic, papers, introduction_pairs),
+            report_body(session, topic, papers, body_pairs),
+            report_discussion(session, topic, papers, discussion_pairs),
+            report_conclusion(session, topic, papers, conclusion_pairs),
+        ]
+        await asyncio.gather(*res)
+        with open("report.md", "w") as f:
+            f.write("\n".join(res))
+        logger.info(f"Topic: {topic} \nReport generated successfully.")
 
 
 def main():
