@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Tuple
 import aiohttp
+import asyncio
 
 
 def help_show_summary(papers: List[Dict[str, Any]]) -> str:
@@ -24,8 +25,7 @@ async def report_abstract(
 ) -> str:
     sys_prompt = f"""You are a senior researcher specializing in {topic} with 15+ years of experience, commissioned to write a comprehensive review on {topic}. Focus solely on crafting the Abstract section.
     """
-    prompt = f"""
-Key findings from seminal papers:
+    prompt = f"""Key findings from seminal papers:
 
 {help_show_summary(papers)}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
@@ -82,8 +82,7 @@ async def report_introduction(
     sys_prompt = f"""As the lead author of a high-impact review in [Journal Name] (IF>20), you are tasked with composing an authoritative Introduction section that contextualizes {topic} within broader academic discourse.
 """
 
-    prompt = f"""
-Curated knowledge base includes:
+    prompt = f"""Curated knowledge base includes:
 
 {help_show_summary(papers)}
 Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
@@ -140,14 +139,13 @@ async def report_body(
 ) -> str:
     sys_prompt = f"""You are a {topic} scholarly architect tasked with generating structured review introductions by synthesizing core research elements. Implement this modular construction method:
     """
-    prompt = f"""
-Knowledge Integration
+    prompt = f"""Knowledge Integration
 Synthesize data from:
 
-    {help_show_summary(papers)}
-    Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
+{help_show_summary(papers)}
+Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-    {help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs)}
 
 Structural Architecture
 Develop 2000-2500 words through 5 interlocked modules:
@@ -173,7 +171,7 @@ Develop 2000-2500 words through 5 interlocked modules:
    - Offer an objective critique of the methodologies and conclusions discussed.
    - Discuss the implications of the findings for the overall field and suggest potential directions for future research.
 
-Based on these instructions, please produce a detailed and well-structured main discussion section for the literature review on [TOPIC] that thoroughly reflects current research debates and insights.
+Based on these instructions, please produce a detailed and well-structured main discussion section for the literature review on {topic} that thoroughly reflects current research debates and insights.
     """
 
     messages = [
@@ -191,16 +189,38 @@ async def report_disscussion(
     papers: List[Dict[str, Any]],
     pairs: List[Tuple[int, int]],
 ) -> str:
-    sys_prompt = f"""You are the chief editor of {topic} coordinating 10 domain experts to construct the discussion of a state-of-the-art review on {topic}. Integrate perspectives from {topic} scholars.
+    sys_prompt = f"""You are an academic writing expert with extensive experience in critically synthesizing research literature. 
     """
-    prompt = f"""
-    Curated knowledge base includes:
+    prompt = f"""You have already produced a comprehensive body section for a literature review on {topic}. Your next task is to generate the discussion section. This section should integrate and critically assess the key findings presented in the main body, exploring their broader implications, limitations, and potential future directions.
+Curated knowledge base includes:
 
-    {help_show_summary(papers)}
-    Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
+{help_show_summary(papers)}
+Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-    {help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs)}
     
+Requirements:
+
+1. Synthesis of Key Findings:
+   - Summarize the main insights and overarching themes from the body section.
+   - Highlight how these findings interrelate and address the core issues of {topic}.
+
+2. Critical Evaluation:
+   - Analyze the strengths and weaknesses of the reviewed studies.
+   - Identify any controversies or conflicting viewpoints present in the literature.
+   - Discuss the limitations of current methodologies and research approaches.
+
+3. Implications and Future Directions:
+   - Reflect on the implications of the findings for the field of {topic}.
+   - Identify and discuss existing research gaps or unanswered questions.
+   - Propose potential avenues for future research that could address these gaps or further refine the current understanding.
+
+4. Academic Tone and Style:
+   - Use formal, precise, and scholarly language.
+   - Ensure that the discussion is coherent, logically structured, and flows smoothly between ideas.
+   - Provide evidence-based arguments and, where applicable, reference key studies (e.g., [Author, Year]).
+
+Based on these guidelines, please craft a detailed, well-organized, and critically reflective discussion section that not only summarizes and critiques the current state of the literature on {topic} but also offers clear recommendations for future research.
     """
 
     messages = [
@@ -212,30 +232,30 @@ async def report_disscussion(
     return response
 
 
-async def report_future_direction(
-    session: aiohttp.ClientSession,
-    topic: str,
-    papers: List[Dict[str, Any]],
-    pairs: List[Tuple[int, int]],
-) -> str:
-    sys_prompt = f"""You are the chief editor of {topic} coordinating 10 domain experts to construct the future direction of a state-of-the-art review on {topic}. Integrate perspectives from {topic} scholars.
-    """
-    prompt = f"""
-    Curated knowledge base includes:
+# async def report_future_direction(
+#     session: aiohttp.ClientSession,
+#     topic: str,
+#     papers: List[Dict[str, Any]],
+#     pairs: List[Tuple[int, int]],
+# ) -> str:
+#     sys_prompt = f"""You are the chief editor of {topic} coordinating 10 domain experts to construct the future direction of a state-of-the-art review on {topic}. Integrate perspectives from {topic} scholars.
+#     """
+#     prompt = f"""
+#     Curated knowledge base includes:
 
-    {help_show_summary(papers)}
-    Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
+#     {help_show_summary(papers)}
+#     Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-    {help_show_pair(papers, pairs)}
-    """
+#     {help_show_pair(papers, pairs)}
+#     """
 
-    messages = [
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": prompt},
-    ]
+#     messages = [
+#         {"role": "system", "content": sys_prompt},
+#         {"role": "user", "content": prompt},
+#     ]
 
-    response = await call_llm(session, messages)
-    return response
+#     response = await call_llm(session, messages)
+#     return response
 
 
 async def report_conclusion(
@@ -244,15 +264,36 @@ async def report_conclusion(
     papers: List[Dict[str, Any]],
     pairs: List[Tuple[int, int]],
 ) -> str:
-    sys_prompt = f"""You are the chief editor of {topic} coordinating 10 domain experts to construct the conclusion of a state-of-the-art review on {topic}. Integrate perspectives from {topic} scholars.
+    sys_prompt = f"""You are an academic writing expert with extensive experience in synthesizing and summarizing research literature.
     """
-    prompt = f"""
-    Curated knowledge base includes:
+    prompt = f"""You have already developed the main body and discussion sections of a literature review on {topic}. Your next task is to produce a robust conclusion section that effectively integrates and summarizes the review.
+Curated knowledge base includes:
 
-    {help_show_summary(papers)}
-    Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
+{help_show_summary(papers)}
+Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-    {help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs)}
+Requirements:
+
+1. Summary of Key Points:
+   - Concisely recapitulate the central themes, significant findings, and critical insights presented in the main body and discussion sections.
+   - Emphasize how the reviewed literature collectively advances the understanding of {topic}.
+
+2. Reflection on Implications:
+   - Discuss the broader implications of the key findings for the field.
+   - Briefly mention any acknowledged limitations and how they influence the overall interpretations.
+   - Showcase the overall contribution of the reviewed literature to the development of {topic}.
+
+3. Recommendations for Future Research:
+   - Provide clear, actionable recommendations or future research directions.
+   - Highlight unresolved issues, gaps in the current literature, and areas that warrant further exploration.
+
+4. Academic Tone and Structure:
+   - Use formal, concise, and scholarly language.
+   - Ensure that the conclusion is well-organized, logically coherent, and does not introduce new evidence beyond the summary of the review.
+   - Conclude with a strong final statement that reinforces the significance of the literature review.
+
+Based on the above criteria, please produce a comprehensive conclusion section for the literature review on {topic} that clearly encapsulates the essence of the review and provides insightful directions for future work.
     """
 
     messages = [
@@ -270,15 +311,29 @@ async def report_title(
     papers: List[Dict[str, Any]],
     pairs: List[Tuple[int, int]],
 ) -> str:
-    sys_prompt = f"""You are the chief editor of {topic} coordinating 10 domain experts to construct the title of a state-of-the-art review on {topic}. Integrate perspectives from {topic} scholars.
+    sys_prompt = f"""You are an academic writing expert who has thoroughly authored a comprehensive literature review on {topic}. Having completed the entire document and deeply understood its content,
     """
     prompt = f"""
-    Curated knowledge base includes:
+Curated knowledge base includes:
 
-    {help_show_summary(papers)}
-    Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
+{help_show_summary(papers)}
+Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
 
-    {help_show_pair(papers, pairs)}
+{help_show_pair(papers, pairs)}
+
+1. Concise and Impactful:
+   - Create a title that is succinct yet powerful, capturing the essence of the review.
+   - Ensure it is clear and informative, providing readers with an immediate sense of the main themes and contributions.
+
+2. Reflective of Core Themes:
+   - Incorporate key insights, findings, and the overall focus of the literature review.
+   - Highlight the significant aspects or trends discussed in the paper without being overly technical.
+
+3. Engaging to the Target Audience:
+   - The title should intrigue potential readers while remaining academically appropriate.
+   - Consider the balance between precision and creativity.
+
+Based on these guidelines, please generate a single title (one sentence) that best encapsulates your work on [TOPIC].
     """
 
     messages = [
@@ -296,21 +351,4 @@ async def report(
     papers: List[Dict[str, Any]],
     pairs: List[Tuple[int, int]],
 ) -> str:
-    sys_prompt = f"""You are the chief editor of {topic} coordinating 10 domain experts to construct the title of a state-of-the-art review on {topic}. Integrate perspectives from {topic} scholars.
-    """
-    prompt = f"""
-    Curated knowledge base includes:
-
-    {help_show_summary(papers)}
-    Besides the above content, the following paper pairs have similar points, I will show the original text to you, please pay special attention to them:
-
-    {help_show_pair(papers, pairs)}
-    """
-
-    messages = [
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": prompt},
-    ]
-
-    response = await call_llm(session, messages)
-    return response
+    pass

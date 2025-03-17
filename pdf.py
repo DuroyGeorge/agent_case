@@ -42,20 +42,22 @@ def process_bookmarks(reader: PyPDF2.PdfReader) -> List[Dict[str, Any]]:
             page.indirect_reference, "idnum"
         ):
             page_id_to_index[page.indirect_reference.idnum] = i + 1
-
+    result.append({"title": "abstract", "page_num": 1})
     for item in bookmarks:
         # Only process dictionary-type bookmark entries
         if isinstance(item, dict) and "/Title" in item:
-            page_ref = item.get("/Page", "未知")
-            object_id = "未知"
-            actual_page = "未知"
+            page_ref = item.get("/Page", "unknown")
+            object_id = "unknown"
+            actual_page = "unknown"
 
             if hasattr(page_ref, "idnum"):
                 object_id = page_ref.idnum
                 # Find the corresponding actual page number
-                actual_page = page_id_to_index.get(object_id, "未找到")
+                actual_page = page_id_to_index.get(object_id, "unknown")
+            if item["/Title"].lower() == "abstract":
+                continue
             bookmark = {
-                "title": item["/Title"],
+                "title": item["/Title"].lower(),
                 "page_num": actual_page,
             }
             result.append(bookmark)
